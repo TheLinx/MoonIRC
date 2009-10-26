@@ -1,0 +1,10 @@
+
+        MoonIRC - A IRC server powered by Lua!
+
+--- Requirements:
+ - Lua 5.1 or newer
+ - LuaSocket 2.0 or newer
+
+--- How to run:
+ - Edit the config.lua file to your needs.
+ - Run the main.lua file with your Lua intepreter.

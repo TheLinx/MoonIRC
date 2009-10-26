@@ -1,0 +1,12 @@
+
+        MoonIRC - A IRC server powered by Lua!
+
+All the code in the Git repository is Public Domain. This
+means that you may use the code however you like; in
+proprietary setups, open-source-only setups, and any other
+that you may come up with. The authors of MoonIRC will
+however appreciate that if you make any changes to the
+source code and you believe that other people may find that
+functionality useful, please backport it to the main MoonIRC
+repo. Also, please leave any version strings as-is, i.e.
+don't turn the version string into a user-agent hell.
