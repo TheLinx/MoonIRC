@@ -1,4 +1,5 @@
 require("socket")
+require("std")
 
 print("Starting MoonIRC Daemon... ")
 
@@ -34,7 +35,8 @@ function string.split(str, pat)
 end
 
 function parsecommand(command)
-    assert(type(command) == "string", "bad argument #1 to 'parsecommand' (string expected, got "..type(command)..") "..command)
+    assert(type(command) == "string", "bad argument #1 to 'parsecommand' (string expected, got "..type(command)..") "..command or "")
+    print("parsing command "..command)
     local fromuser = ""
     if command:sub(1,1) == ":" then
         local x = command:find(" ")
@@ -52,7 +54,7 @@ function parsecommand(command)
         if arguments:find(":") then
             local x = arguments:find(":")
             lastarg = arguments:sub(x+1)
-            arguments = arguments:sub(x)
+            arguments = arguments:sub(1,x-2)
         end
         arguments = arguments:split(" ")
         if lastarg then arguments[#arguments+1] = lastarg end
@@ -60,10 +62,20 @@ function parsecommand(command)
     return command,arguments,fromuser
 end
 
+function userexists(name)
+    for _,user in pairs(USERS) do
+        if user.name == name then
+            return true
+        end
+    end
+    return false
+end
+
 function irc_pass(user, arg)
+    local arg = arg[1]
     if user.pass then
-        user.socket:send("PASS :You may not reregister")
-    elseif not arg then
+        user.socket:send(":You may not reregister")
+    elseif not arg or #arg < 1 then
         user.socket:send("PASS :Not enough parameters")
     else
         user.pass = arg
@@ -71,10 +83,30 @@ function irc_pass(user, arg)
     return user
 end
 function irc_nick(user, arg)
-    if 
-
+    local arg = arg[1]
+    if not arg or #arg < 1 then
+        user.socket:send(":No nickname given")
+    elseif #arg > 9 or arg:gsub("[_%w]", ""):len() > 0 then
+        user.socket:send(arg.." :Erroneus nickname")
+    elseif userexists(arg) then
+        user.socket:send(arg.." :Nickname is already in use")
+    else
+        user.name = arg
+    end
+    return user
+end
+function irc_user(user, arg)
+    if not arg or #arg ~= 4 then
+        user.socket:send("USER :Not enough parameters")
+    elseif user.name == arg[1] then
+        user.hostname = arg[2]
+        user.server = arg[3]
+        user.realname = arg[4]
+    end
+    return user
+end
 function handshake(user)
-    print("connection initiated from "..user.ip)
+    print("Connection initiated from "..user.ip)
     while true do
         local c,a = parsecommand(user.socket:receive("*l"))
         if c == "PASS" then
