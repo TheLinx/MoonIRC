@@ -12,6 +12,20 @@ assert(soc:settimeout(0), "could not set timeout")
 assert(soc:setoption('keepalive', true), "could not set keepalive")
 print("Listening for connections...")
 
+do
+	olderror = error
+	function error(...)
+		for _,user in pairs(USERS) do
+			user.socket:close()
+		end
+		soc:close()
+		olderror(...)
+	end
+end
+function printf(...)
+	return print(string.format(...))
+end
+
 CREATED = os.date("%x")
 VERSION = "MoonIRC ALPHA"
 USERS = {}
@@ -198,11 +212,13 @@ end
 -- UTILITY FUNCTIONS --
 function send(user, code, ...)
     local s = string.format(":%s %0.3d %s", servername, REPLIES[code][1], string.format(REPLIES[code][2], ...))
-    user.socket:send(s)
+	print(string.format("--> (%s) %q", user.ip, s))
+    return assert(user.socket:send(s), "!!! (%s) could not send data to user ", user.ip)
 end
-function parsecommand(command)
+function parsecommand(user, command)
+	if command == nil then return false end
     assert(type(command) == "string", "bad argument #1 to 'parsecommand' (string expected, got "..type(command)..") ")
-    print("parsing command "..command)
+    print(string.format("<-- (%s) %q", user.ip, command))
     local fromuser = ""
     if command:sub(1,1) == ":" then
         local x = command:find(" ")
@@ -240,69 +256,75 @@ end
 function irc_pass(user, arg)
     local arg = arg[1]
     if not arg or #arg < 1 then
-        send(user, "ERR_NEEDMOREPARAMS", "PASS")
+        return false,send(user, "ERR_NEEDMOREPARAMS", "PASS")
     elseif user.pass then
-        send(user, "ERR_ALREADYREGISTERED")
+        return false,send(user, "ERR_ALREADYREGISTERED")
     else
         user.pass = arg
     end
-    return user
+    return true,user
 end
 function irc_nick(user, arg)
     local arg = arg[1]
     if not arg or #arg < 1 then
-        send(user, "ERR_NONICKNAMEGIVEN")
+        return false,send(user, "ERR_NONICKNAMEGIVEN")
     elseif #arg > 9 or arg:gsub("[_%w]", ""):len() > 0 then
-        send(user, "ERR_ERRONEUSNICKNAME", arg)
+        return false,send(user, "ERR_ERRONEUSNICKNAME", arg)
     elseif userexists(arg) then
-        send(user, "ERR_NICKNAMEINUSER", arg)
+        return false,send(user, "ERR_NICKNAMEINUSER", arg)
     else
         user.name = arg
     end
-    return user
+    return true,user
 end
 function irc_user(user, arg)
     if not arg or #arg ~= 4 then
         send(user, "ERR_NEEDMOREPARAMS", "USER")
-    elseif user.name == arg[1] then
+    else
+		user.username = arg[1]
         user.hostname = arg[2]
         user.server = arg[3]
         user.realname = arg[4]
     end
-    return user
+    return true,user
 end
 
 -- OTHER FUNCTIONS --
 function welcome(user)
-	send(user, "RPL_WELCOME", user.name, user.realname, user.hostname)
+	send(user, "RPL_WELCOME", user.name, user.username, user.hostname)
 	send(user, "RPL_YOURHOST", servername, VERSION)
 	send(user, "RPL_CREATED", CREATED)
-end
-function handshake(user)
-    print("Connection initiated from "..user.ip)
-    while true do
-        local c,a = parsecommand(user.socket:receive("*l"))
-        if c == "PASS" then
-            user = irc_pass(user, a)
-        elseif c == "NICK" then
-            user = irc_nick(user, a)
-        elseif c == "USER" then
-            user = irc_user(user, a)
-            break
-        else
-            error("user is a fag ("..c..","..unpack(a)..")")
-        end
-        USERS[user.ip] = user
-    end
     send(user, "RPL_LUSERCLIENT", #USERS, 0, 1)
     send(user, "RPL_LUSEROP", 0)
     send(user, "RPL_LUSERCHANNELS", #CHANNELS)
     send(user, "RPL_LUSERME", #USERS, 0)
-    send(user, "RPL_MOTDSTART", "moonirctest")
+    send(user, "RPL_MOTDSTART", servername)
     for _,v in pairs(string.split(motd, "\n")) do
         send(user, "RPL_MOTD", v)
     end
     send(user, "RPL_ENDOFMOTD")
+end
+function handshake(user)
+    printf("<-- (%s) initiated", user.ip)
+    while true do
+        local c,a = parsecommand(user, user.socket:receive("*l"))
+        if not c then return false end
+        if c == "PASS" then
+            suc,user = irc_pass(user, a)
+            if not suc then return false end
+        elseif c == "NICK" then
+            suc,user = irc_nick(user, a)
+            if not suc then return false end
+        elseif c == "USER" then
+            suc,user = irc_user(user, a)
+            if not suc then return false end
+			printf("!!! (%s) identified as %s!%s@%s", user.ip, user.name, user.username, user.hostname)
+            break
+        else
+            return false
+        end
+        USERS[user.ip] = user
+    end
     return true
 end
 
@@ -316,11 +338,15 @@ while true do
             ip = ret_ip,
             port = ret_port
         }
-        handshake(USERS[ret_ip])
+        if handshake(USERS[ret_ip]) then
+			welcome(USERS[ret_ip])
+		else
+			ret:close()
+		end
     else
         assert(err == "timeout", err)
     end
     for _,v in pairs(USERS) do
-        parsecommand(v.socket:receive("*l"))
+        parsecommand(v, v.socket:receive("*l"))
     end
 end
