@@ -13,17 +13,17 @@ assert(soc:setoption('keepalive', true), "could not set keepalive")
 print("Listening for connections...")
 
 do
-	olderror = error
-	function error(...)
-		for _,user in pairs(USERS) do
-			user.socket:close()
-		end
-		soc:close()
-		olderror(...)
-	end
+    olderror = error
+    function error(...)
+        for _,user in pairs(USERS) do
+            user.socket:close()
+        end
+        soc:close()
+        olderror(...)
+    end
 end
 function printf(...)
-	return print(string.format(...))
+    return print(string.format(...))
 end
 
 CREATED = os.date("%x")
@@ -32,12 +32,12 @@ USERS = {}
 CHANNELS = {}
 SERVERS = {}
 REPLIES = {
-	RPL_WELCOME = {001, "Welcome to the Internet Relay Network %s!%s@%s"},
-	-- Welcome to the Internet Relay Network <nick>!<user>@<host>
-	RPL_YOURHOST = {002, "Your host is %s, running version %s"},
-	RPL_CREATED = {003, "This server was created %s"},
-	RPL_MYINFO = {004, "%s %s %s %s"},
-	-- <servername> <version> <available user modes> <available channel modes>
+    RPL_WELCOME = {001, "Welcome to the Internet Relay Network %s!%s@%s"},
+    -- Welcome to the Internet Relay Network <nick>!<user>@<host>
+    RPL_YOURHOST = {002, "Your host is %s, running version %s"},
+    RPL_CREATED = {003, "This server was created %s"},
+    RPL_MYINFO = {004, "%s %s %s %s"},
+    -- <servername> <version> <available user modes> <available channel modes>
     RPL_TRACELINK = {200, "Link %s %s %s"},
     -- Link <version & debug level> <destination> <next server>
     RPL_TRACECONNECTING = {201, "Try. %s %s"},
@@ -197,7 +197,7 @@ function string.split(str, pat)
    local s, e, cap = str:find(fpat, 1)
    while s do
       if s ~= 1 or cap ~= "" then
-	 table.insert(t,cap)
+     table.insert(t,cap)
       end
       last_end = e+1
       s, e, cap = str:find(fpat, last_end)
@@ -212,11 +212,11 @@ end
 -- UTILITY FUNCTIONS --
 function send(user, code, ...)
     local s = string.format(":%s %0.3d %s", servername, REPLIES[code][1], string.format(REPLIES[code][2], ...))
-	print(string.format("--> (%s) %q", user.ip, s))
+    print(string.format("--> (%s) %q", user.ip, s))
     return assert(user.socket:send(s), "!!! (%s) could not send data to user ", user.ip)
 end
 function parsecommand(user, command)
-	if command == nil then return false end
+    if command == nil then return false end
     assert(type(command) == "string", "bad argument #1 to 'parsecommand' (string expected, got "..type(command)..") ")
     print(string.format("<-- (%s) %q", user.ip, command))
     local fromuser = ""
@@ -281,7 +281,7 @@ function irc_user(user, arg)
     if not arg or #arg ~= 4 then
         send(user, "ERR_NEEDMOREPARAMS", "USER")
     else
-		user.username = arg[1]
+        user.username = arg[1]
         user.hostname = arg[2]
         user.server = arg[3]
         user.realname = arg[4]
@@ -291,9 +291,9 @@ end
 
 -- OTHER FUNCTIONS --
 function welcome(user)
-	send(user, "RPL_WELCOME", user.name, user.username, user.hostname)
-	send(user, "RPL_YOURHOST", servername, VERSION)
-	send(user, "RPL_CREATED", CREATED)
+    send(user, "RPL_WELCOME", user.name, user.username, user.hostname)
+    send(user, "RPL_YOURHOST", servername, VERSION)
+    send(user, "RPL_CREATED", CREATED)
     send(user, "RPL_LUSERCLIENT", #USERS, 0, 1)
     send(user, "RPL_LUSEROP", 0)
     send(user, "RPL_LUSERCHANNELS", #CHANNELS)
@@ -318,7 +318,7 @@ function handshake(user)
         elseif c == "USER" then
             suc,user = irc_user(user, a)
             if not suc then return false end
-			printf("!!! (%s) identified as %s!%s@%s", user.ip, user.name, user.username, user.hostname)
+            printf("!!! (%s) identified as %s!%s@%s", user.ip, user.name, user.username, user.hostname)
             break
         else
             return false
@@ -339,10 +339,10 @@ while true do
             port = ret_port
         }
         if handshake(USERS[ret_ip]) then
-			welcome(USERS[ret_ip])
-		else
-			ret:close()
-		end
+            welcome(USERS[ret_ip])
+        else
+            ret:close()
+        end
     else
         assert(err == "timeout", err)
     end
