@@ -12,10 +12,18 @@ assert(soc:settimeout(0), "could not set timeout")
 assert(soc:setoption('keepalive', true), "could not set keepalive")
 print("Listening for connections...")
 
+CREATED = os.date("%x")
+VERSION = "MoonIRC ALPHA"
 USERS = {}
 CHANNELS = {}
 SERVERS = {}
 REPLIES = {
+	RPL_WELCOME = {001, "Welcome to the Internet Relay Network %s!%s@%s"},
+	-- Welcome to the Internet Relay Network <nick>!<user>@<host>
+	RPL_YOURHOST = {002, "Your host is %s, running version %s"},
+	RPL_CREATED = {003, "This server was created %s"},
+	RPL_MYINFO = {004, "%s %s %s %s"},
+	-- <servername> <version> <available user modes> <available channel modes>
     RPL_TRACELINK = {200, "Link %s %s %s"},
     -- Link <version & debug level> <destination> <next server>
     RPL_TRACECONNECTING = {201, "Try. %s %s"},
@@ -187,12 +195,11 @@ function string.split(str, pat)
    return t
 end
 
+-- UTILITY FUNCTIONS --
 function send(user, code, ...)
-    local s = ":"..REPLIES[code][1].." "
-    s = s..string.format(REPLIES[code][2], ...).."\r\n"
+    local s = string.format(":%s %0.3d %s", servername, REPLIES[code][1], string.format(REPLIES[code][2], ...))
     user.socket:send(s)
 end
-
 function parsecommand(command)
     assert(type(command) == "string", "bad argument #1 to 'parsecommand' (string expected, got "..type(command)..") ")
     print("parsing command "..command)
@@ -220,7 +227,6 @@ function parsecommand(command)
     end
     return command,arguments,fromuser
 end
-
 function userexists(name)
     for _,user in pairs(USERS) do
         if user.name == name then
@@ -230,6 +236,7 @@ function userexists(name)
     return false
 end
 
+-- IRC COMMANDS --
 function irc_pass(user, arg)
     local arg = arg[1]
     if not arg or #arg < 1 then
@@ -264,6 +271,13 @@ function irc_user(user, arg)
     end
     return user
 end
+
+-- OTHER FUNCTIONS --
+function welcome(user)
+	send(user, "RPL_WELCOME", user.name, user.realname, user.hostname)
+	send(user, "RPL_YOURHOST", servername, VERSION)
+	send(user, "RPL_CREATED", CREATED)
+end
 function handshake(user)
     print("Connection initiated from "..user.ip)
     while true do
@@ -292,6 +306,7 @@ function handshake(user)
     return true
 end
 
+-- MAIN LOOP --
 while true do
     local ret,err = soc:accept()
     if ret then
