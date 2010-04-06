@@ -321,7 +321,7 @@ function connectionHandler(soc)
             if not USERS[u_ip] then
                 USERS[u_ip] = {
                     adress = u_ip,
-                    hostname = "on.nimp.org",
+                    hostname = "on.nimp.org", -- protip: don't go here
                     mode = "",
                     name = "Guest-"..#USERS,
                     new = true
