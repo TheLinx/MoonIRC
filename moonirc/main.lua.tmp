@@ -1,35 +1,43 @@
 require("socket")
-require("copas")
-require("printr")
+require("std")
 
-io.write("Loading config... ") io.flush()
+print("Loading config...")
 dofile("config.lua")
-print("done!")
+print("Starting MoonIRC Daemon... ")
 
-socket = assert(socket.tcp(), "could not create socket")
-assert(socket:bind('*', serverport), "could not bind socket")
-assert(socket:listen(), "could not initiate socket")
-assert(socket:settimeout(0), "could not set timeout")
-assert(socket:setoption('keepalive', true), "could not set keepalive")
+soc = assert(socket.tcp(), "could not create socket")
+assert(soc:bind('*', 6667), "could not bind socket")
+assert(soc:listen(), "could not initiate socket")
+assert(soc:settimeout(0), "could not set timeout")
+assert(soc:setoption('keepalive', true), "could not set keepalive")
+print("Listening for connections...")
 
-function printf(s, ...)
-    local g,o = pcall(function(t, ...) return string.format(t, ...) end, s, ...)
-    return print((g and o) or s)
+do
+	olderror = error
+	function error(...)
+		for _,user in pairs(USERS) do
+			user.socket:close()
+		end
+		soc:close()
+		olderror(...)
+	end
+end
+function printf(...)
+	return print(string.format(...))
 end
 
-CREATED = os.date("%c")
-VERSION = "MoonIRC-ALPHA"
+CREATED = os.date("%x")
+VERSION = "MoonIRC ALPHA"
 USERS = {}
 CHANNELS = {}
 SERVERS = {}
 REPLIES = {
-    CMD_PONG = {"PONG", "%s :%s"},
-    RPL_WELCOME = {001, "%s :Welcome to the %s %s"},
-    -- :Welcome to the <servername> <nickname>
-    RPL_YOURHOST = {002, "%s :Your host is %s, running version %s"},
-    RPL_CREATED = {003, "%s :This server was created %s"},
-    RPL_MYINFO = {004, "%s %s %s %s %s"},
-    -- <target nick> <servername> <version> <available user modes> <available channel modes>
+	RPL_WELCOME = {001, "Welcome to the Internet Relay Network %s!%s@%s"},
+	-- Welcome to the Internet Relay Network <nick>!<user>@<host>
+	RPL_YOURHOST = {002, "Your host is %s, running version %s"},
+	RPL_CREATED = {003, "This server was created %s"},
+	RPL_MYINFO = {004, "%s %s %s %s"},
+	-- <servername> <version> <available user modes> <available channel modes>
     RPL_TRACELINK = {200, "Link %s %s %s"},
     -- Link <version & debug level> <destination> <next server>
     RPL_TRACECONNECTING = {201, "Try. %s %s"},
@@ -65,12 +73,12 @@ REPLIES = {
     RPL_STATSOLINE = {243, "%s * %s"},
     RPL_STATSHLINE = {244, "%s * %s"},
     -- H <mask> * <name>
-    RPL_LUSERCLIENT = {251, "%s :There are %d users and %d invisible on %d servers"},
-    RPL_LUSEROP = {252, "%s %d :operator(s) online"},
-    RPL_LUSERUNKOWN = {253, "%s %d :unkown connections"},
-    RPL_LUSERCHANNELS = {254, "%s %d :channels formed"},
-    RPL_LUSERME = {255, "%s :I have %d clients and %d servers"},
-    RPL_ADMINME = {256, "%s %s :Administrative info"},
+    RPL_LUSERCLIENT = {251, ":There are %d users and %d invisible on %d servers"},
+    RPL_LUSEROP = {252, "%d :operator(s) online"},
+    RPL_LUSERUNKOWN = {253, "%d :unkown connections"},
+    RPL_LUSERCHANNELS = {254, "%d :channels formed"},
+    RPL_LUSERME = {255, ":I have %d clients and %d servers"},
+    RPL_ADMINME = {256, "%s :Administrative info"},
     RPL_ADMINLOC1 = {257, ":%s"},
     -- city, state, country
     RPL_ADMINLOC2 = {258, ":%s"},
@@ -123,10 +131,10 @@ REPLIES = {
     RPL_ENDOFBANLIST = {368, "%s :End of channel ban list"},
     RPL_ENDOFWHOWAS = {369, "%s :End of WHOWAS"},
     RPL_INFO = {371, ":%s"},
-    RPL_MOTD = {372, "%s :- %s"},
-    RPL_ENDOFINFO = {374, "%s :End of /INFO list"},
-    RPL_MOTDSTART = {375, "%s :- %s Message of the day - "},
-    RPL_ENDOFMOTD = {376, "%s :End of /MOTD command"},
+    RPL_MOTD = {372, ":- %s"},
+    RPL_ENDOFINFO = {374, ":End of /INFO list"},
+    RPL_MOTDSTART = {375, ":- %s Message of the day - "},
+    RPL_ENDOFMOTD = {376, ":End of /MOTD command"},
     RPL_YOUREOPER = {381, ":You are now an IRC operator"},
     RPL_REHASHING = {382, "%s :Rehashing"},
     RPL_TIME = {391, "%s :%s"},
@@ -169,7 +177,7 @@ REPLIES = {
     ERR_YOUREBANNEDCREEP = {465, ":You are banned from this server"},
     ERR_KEYSET = {467, "%s :Channel key already set"},
     ERR_CHANNELISFULL = {471, "%s :Cannot join channel (+l)"},
-    ERR_UNKNOWNMODE = {472, "%s %s :is unknown mode char to me"},
+    ERR_UNKOWNMODE = {472, "%s :is unknown mode char to me"},
     ERR_INVITEONLYCHAN = {473, "%s :Cannot join channel (+i)"},
     ERR_BANNEDFROMCHAN = {474, "%s :Cannot join channel (+b)"},
     ERR_BADCHANNELKEY = {475, "%s :Cannot join channel (+k)"},
@@ -189,7 +197,7 @@ function string.split(str, pat)
    local s, e, cap = str:find(fpat, 1)
    while s do
       if s ~= 1 or cap ~= "" then
-     table.insert(t,cap)
+	 table.insert(t,cap)
       end
       last_end = e+1
       s, e, cap = str:find(fpat, last_end)
@@ -202,20 +210,15 @@ function string.split(str, pat)
 end
 
 -- UTILITY FUNCTIONS --
-function format(code, ...)
-    if tonumber(REPLIES[code][1]) then
-        cmd = string.format("%0.3d", REPLIES[code][1])
-    else
-        cmd = REPLIES[code][1]
-    end
-    arg = string.format(REPLIES[code][2], ...)
-    return string.format(":%s %s %s", serverhost, cmd, arg)
-end
-function send(soc, ip, s)
-    printf("<-- (%s) %s", ip, s)
-    soc:send(s.."\r\n")
+function send(user, code, ...)
+    local s = string.format(":%s %0.3d %s", servername, REPLIES[code][1], string.format(REPLIES[code][2], ...))
+	print(string.format("--> (%s) %q", user.ip, s))
+    return assert(user.socket:send(s), "!!! (%s) could not send data to user ", user.ip)
 end
 function parsecommand(user, command)
+	if command == nil then return false end
+    assert(type(command) == "string", "bad argument #1 to 'parsecommand' (string expected, got "..type(command)..") ")
+    print(string.format("<-- (%s) %q", user.ip, command))
     local fromuser = ""
     if command:sub(1,1) == ":" then
         local x = command:find(" ")
@@ -228,11 +231,8 @@ function parsecommand(user, command)
         arguments = command:sub(x+1)
         command = command:sub(1,x-1)
     end
-    if arguments:sub(1,1) == ":" then
-        arguments = arguments:sub(2)
-    end
     do
-        local lastarg
+        local lastarg = ""
         if arguments:find(":") then
             local x = arguments:find(":")
             lastarg = arguments:sub(x+1)
@@ -241,7 +241,6 @@ function parsecommand(user, command)
         arguments = arguments:split(" ")
         if lastarg then arguments[#arguments+1] = lastarg end
     end
-    --printf(" - got command %s arguments %s", tostring(command), tostring(arguments))
     return command,arguments,fromuser
 end
 function userexists(name)
@@ -252,111 +251,102 @@ function userexists(name)
     end
     return false
 end
-function usermode(act, mode)
-    if act == "add" then
-        
-    elseif act == "del" then
-        
-    elseif act == "chk" then
-        return (user.mode:find(mode) ~= nil)
-    end
-end
 
 -- IRC COMMANDS --
-command = {}
-function command.pass(user, arg)
-    do return format("ERR_NEEDMOREPARAMS", "PASS") end
+function irc_pass(user, arg)
     local arg = arg[1]
     if not arg or #arg < 1 then
-        return format("ERR_NEEDMOREPARAMS", "PASS")
+        return false,send(user, "ERR_NEEDMOREPARAMS", "PASS")
     elseif user.pass then
-        return format("ERR_ALREADYREGISTERED")
+        return false,send(user, "ERR_ALREADYREGISTERED")
+    else
+        user.pass = arg
     end
-    USERS[user.adress].pass = arg
+    return true,user
 end
-function command.nick(user, arg)
+function irc_nick(user, arg)
     local arg = arg[1]
     if not arg or #arg < 1 then
-        return format("ERR_NONICKNAMEGIVEN")
+        return false,send(user, "ERR_NONICKNAMEGIVEN")
     elseif #arg > 9 or arg:gsub("[_%w]", ""):len() > 0 then
-        return format("ERR_ERRONEUSNICKNAME", arg)
+        return false,send(user, "ERR_ERRONEUSNICKNAME", arg)
     elseif userexists(arg) then
-        return format("ERR_NICKNAMEINUSER", arg)
+        return false,send(user, "ERR_NICKNAMEINUSER", arg)
+    else
+        user.name = arg
     end
-    USERS[user.adress].name = arg
+    return true,user
 end
-function command.user(user, arg)
+function irc_user(user, arg)
     if not arg or #arg ~= 4 then
-        return format("ERR_NEEDMOREPARAMS", "USER")
+        send(user, "ERR_NEEDMOREPARAMS", "USER")
+    else
+		user.username = arg[1]
+        user.hostname = arg[2]
+        user.server = arg[3]
+        user.realname = arg[4]
     end
-    USERS[user.adress].username = arg[1]
-    USERS[user.adress].realname = arg[4]
-end
-function command.mode(user, arg)
-    return format("ERR_UNKNOWNMODE", user.name, arg[2]:gsub("%+", ""))
-end
-function command.ping(user, arg)
-    return format("CMD_PONG", serverhost, arg[2] or "")
-end
-function command.quit(user)
-    USERS[user.adress] = nil
+    return true,user
 end
 
-command_mt = {
-    __index = function(tbl, key)
-        return rawget(tbl,key) or function(user)
-            return format("ERR_UNKNOWNCOMMAND", key)
-        end
+-- OTHER FUNCTIONS --
+function welcome(user)
+	send(user, "RPL_WELCOME", user.name, user.username, user.hostname)
+	send(user, "RPL_YOURHOST", servername, VERSION)
+	send(user, "RPL_CREATED", CREATED)
+    send(user, "RPL_LUSERCLIENT", #USERS, 0, 1)
+    send(user, "RPL_LUSEROP", 0)
+    send(user, "RPL_LUSERCHANNELS", #CHANNELS)
+    send(user, "RPL_LUSERME", #USERS, 0)
+    send(user, "RPL_MOTDSTART", servername)
+    for _,v in pairs(string.split(motd, "\n")) do
+        send(user, "RPL_MOTD", v)
     end
-}
-setmetatable(command, command_mt)
-
-function connectionHandler(soc)
-    local soc = copas.wrap(soc)
+    send(user, "RPL_ENDOFMOTD")
+end
+function handshake(user)
+    printf("<-- (%s) initiated", user.ip)
     while true do
-        local data = soc:receive()
-        if data then
-            local u_ip,u_port = soc.socket:getpeername()
-            printf("--> (%s) %s", u_ip, data)
-            if not USERS[u_ip] then
-                USERS[u_ip] = {
-                    adress = u_ip,
-                    hostname = "on.nimp.org",
-                    mode = "",
-                    name = "Guest-"..#USERS,
-                    new = true
-                }
-            end
-            local user = USERS[u_ip]
-            local c,a,f = false,false,false
-            c,a,f = parsecommand(user, data)
-            if c then
-                c = c:lower()
-                local s = command[c](user, a)
-                if s then
-                    send(soc, u_ip, s)
-                end
-            end
-            if USERS[u_ip] and USERS[u_ip].new and USERS[u_ip].username then
-                printf("<-- (%s) shaking hands", user.adress)
-                send(soc, u_ip, format("RPL_WELCOME", user.name, servername, user.name))
-                send(soc, u_ip, format("RPL_YOURHOST", user.name, serverhost, VERSION))
-                send(soc, u_ip, format("RPL_CREATED", user.name, CREATED))
-                send(soc, u_ip, format("RPL_LUSERCLIENT", user.name, #USERS, 0, 1))
-                send(soc, u_ip, format("RPL_LUSEROP", user.name, 0))
-                send(soc, u_ip, format("RPL_LUSERCHANNELS", user.name, #CHANNELS))
-                send(soc, u_ip, format("RPL_LUSERME", user.name, #USERS, 0))
-                send(soc, u_ip, format("RPL_MOTDSTART", user.name, servername))
-                for _,v in pairs(string.split(motd, "\n")) do
-                    send(soc, u_ip, format("RPL_MOTD", user.name, v))
-                end
-                send(soc, u_ip, format("RPL_ENDOFMOTD", user.name))
-                USERS[u_ip].new = false
-            end
+        local c,a = parsecommand(user, user.socket:receive("*l"))
+        if not c then return false end
+        if c == "PASS" then
+            suc,user = irc_pass(user, a)
+            if not suc then return false end
+        elseif c == "NICK" then
+            suc,user = irc_nick(user, a)
+            if not suc then return false end
+        elseif c == "USER" then
+            suc,user = irc_user(user, a)
+            if not suc then return false end
+			printf("!!! (%s) identified as %s!%s@%s", user.ip, user.name, user.username, user.hostname)
+            break
+        else
+            return false
         end
+        USERS[user.ip] = user
     end
+    return true
 end
 
-print("GURREN LAGANN, SPIN ON")
-copas.addserver(socket, connectionHandler)
-copas.loop()
+-- MAIN LOOP --
+while true do
+    local ret,err = soc:accept()
+    if ret then
+        local ret_ip,ret_port = ret:getpeername()
+        USERS[ret_ip] = {
+            socket = ret,
+            ip = ret_ip,
+            port = ret_port
+        }
+        if handshake(USERS[ret_ip]) then
+			welcome(USERS[ret_ip])
+		else
+			ret:close()
+		end
+    else
+        assert(err == "timeout", err)
+    end
+    for _,v in pairs(USERS) do
+        parsecommand(v, v.socket:receive("*l"))
+    end
+end
